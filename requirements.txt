@@ -1,0 +1,13 @@
+streamlit
+requests
+pandas
+numpy
+altair
+langchain
+langchain-core
+langchain-community
+langchain-google-genai # For Gemini
+langchain-openai       # For OpenAI
+langchain-groq         # For Groq
+langchain-huggingface  # For HuggingFace
+langchain-cohere       # For Cohere
