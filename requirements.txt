@@ -1,13 +1,18 @@
 streamlit
 requests
 pandas
-numpy
+numpy<2.0
 altair
 langchain
 langchain-core
 langchain-community
-langchain-google-genai # For Gemini
-langchain-openai       # For OpenAI
-langchain-groq         # For Groq
-langchain-huggingface  # For HuggingFace
-langchain-cohere       # For Cohere
+langchain-google-genai
+langchain-openai
+langchain-groq
+langchain-huggingface
+langchain-cohere
+yfinance
+pandas-ta
+pydantic
+beautifulsoup4
+lxml

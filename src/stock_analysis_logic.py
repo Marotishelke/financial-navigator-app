@@ -1,114 +1,125 @@
+# src/stock_analysis_logic.py - DEFINITIVE FINAL VERSION
 import streamlit as st
-import asyncio
-from src.agents import LangchainStockAgent # Import the new LangChain agent
-from src.tools import chart_generator_tool # Import the tool to generate charts (still used for display)
-from langchain_community.chat_message_histories import StreamlitChatMessageHistory # For persistent chat history
-from langchain_core.messages import HumanMessage, AIMessage
+import json
+import re
+from src.agents import LangchainStockAgent
+from src.tools import get_technical_recommendation as direct_get_recommendation
+from src.tools import get_fundamental_analysis as direct_get_fundamentals
+from src.tools import get_latest_news_for_summary as direct_get_news
+from langchain_community.chat_message_histories import StreamlitChatMessageHistory
+from langchain_core.messages import AIMessage
+
+def extract_ticker(prompt: str) -> str:
+    """Extracts a stock ticker reliably from a prompt."""
+    # This corrected regex finds words that are all caps, potentially with a dot.
+    matches = re.findall(r'\b[A-Z][A-Z0-9-]{1,9}(?:\.NS|\.BO)?\b', prompt.upper())
+    if not matches: return None
+    
+    # Exclude common non-ticker uppercase words
+    non_tickers = ["ANALYSIS", "TECHNICAL", "NEWS", "FUNDAMENTAL", "RECOMMENDATION", "PLEASE", "FOR"]
+    matches = [m for m in matches if m not in non_tickers]
+    
+    if not matches: return None
+
+    # Prefer matches with a '.' as they are explicitly tickers.
+    for match in matches:
+        if '.' in match:
+            return match
+            
+    # If no ticker with a '.', pick the shortest remaining all-caps word.
+    matches.sort(key=len)
+    return matches[0]
 
 async def show_stocks_chatbot():
-    """
-    Manages the Streamlit UI for the stock analysis chatbot,
-    integrating the LangchainStockAgent for dynamic responses and tool usage.
-    """
-    st.subheader("📊 Stock Analysis Chatbot")
+    """Manages the UI using the final HYBRID approach with all features and bug fixes."""
+    if "stock_chat_messages" not in st.session_state:
+        st.session_state.stock_chat_messages = []
 
-    # Get API key and provider from session state
-    current_api_key = st.session_state.get("api_key", "")
-    current_llm_provider = st.session_state.get("llm_provider", "Gemini")
+    st.title("📊 Financial Navigator Chatbot")
+    st.markdown("Ask for a recommendation, fundamentals, or news.")
 
-    if not current_api_key:
-        st.warning("Please enter your API key on the login page to use the chatbot.")
-        return
+    st.markdown("""
+    <style>
+        .analysis-container { border: 1px solid #e9ecef; border-radius: 12px; padding: 25px; background-color: #ffffff; margin-top: 1em; box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
+        .analysis-container h4 { color: #0d6efd; border-bottom: 2px solid #f0f2f6; padding-bottom: 10px; margin-top: 0; }
+        .analysis-container h5 { margin-top: 20px; margin-bottom: 10px; color: #495057; font-size: 1.1em; }
+        .rec-percent { font-size: 1.1em; font-weight: 600; padding: 8px 12px; border-radius: 8px; text-align: center; display: inline-block; margin: 3px; }
+        .buy { background-color: #d1e7dd; color: #0f5132; }
+        .hold { background-color: #fff3cd; color: #664d03; }
+        .sell { background-color: #f8d7da; color: #842029; }
+        .verdict-verystrong, .verdict-strong { color: #0f5132; font-weight: 700; }
+        .verdict-average { color: #664d03; font-weight: 700; }
+        .verdict-weak { color: #842029; font-weight: 700; }
+    </style>
+    """, unsafe_allow_html=True)
 
-    # Initialize StreamlitChatMessageHistory for persistent chat history
-    # This automatically syncs with st.session_state
+    current_api_key = st.session_state.get("api_key", ""); current_llm_provider = st.session_state.get("llm_provider", "Groq")
+    if not current_api_key: st.warning("Please enter your API key on the login page."); return
     msgs = StreamlitChatMessageHistory(key="stock_chat_messages")
 
-    # Initialize the LangChain agent with the selected LLM
-    if "langchain_stock_agent" not in st.session_state or \
-       st.session_state.langchain_stock_agent.provider != current_llm_provider or \
-       st.session_state.langchain_stock_agent.api_key != current_api_key:
-        try:
+    if "langchain_stock_agent" not in st.session_state or st.session_state.langchain_stock_agent.provider != current_llm_provider:
+        with st.spinner("Initializing agent..."):
             st.session_state.langchain_stock_agent = LangchainStockAgent(current_llm_provider, current_api_key)
-        except ValueError as e:
-            st.error(f"Failed to initialize agent: {e}")
-            return
 
-    # Display chat messages from history
     for msg in msgs.messages:
-        # LangChain messages have 'type' (human, ai, system, etc.)
-        # Streamlit chat_message expects 'user' or 'assistant'.
-        st_chat_role = "user" if msg.type == "human" else "assistant"
-        with st.chat_message(st_chat_role):
-            st.markdown(msg.content)
-            # If a chart was previously generated, display it
-            if hasattr(msg, 'additional_kwargs') and 'chart_data' in msg.additional_kwargs:
-                try:
-                    chart = chart_generator_tool(msg.additional_kwargs['chart_data'], msg.additional_kwargs.get('chart_title', 'Stock'))
-                    st.altair_chart(chart, use_container_width=True)
-                    st.caption("Note: This chart uses hypothetical data for demonstration purposes only, as real-time stock data fetching is not integrated in this demo environment.")
-                except Exception as e:
-                    st.error(f"Error displaying historical chart: {e}")
+        with st.chat_message(msg.type):
+            st.markdown(str(msg.content), unsafe_allow_html=True)
 
-
-    # Chat input for user
-    if prompt := st.chat_input("Ask me about stocks (e.g., 'fundamental analysis for AAPL', 'prediction for TSLA', 'sector analysis for tech')"):
-        # Add user message to LangChain history and display
+    if prompt := st.chat_input("e.g., recommendation for AAPL"):
         msgs.add_user_message(prompt)
-        with st.chat_message("user"):
-            st.markdown(prompt)
+        st.chat_message("user").write(prompt)
 
-        # Get assistant response using the LangChain agent
         with st.chat_message("assistant"):
-            with st.spinner(f"Analyzing with {current_llm_provider}..."):
-                try:
-                    # Run the agent's invoke method
-                    # The `ainvoke` method runs the agent's logic, including tool calls.
-                    # The chat history is passed via the prompt template's MessagesPlaceholder.
-                    # This will automatically use the `msgs.messages` from StreamlitChatMessageHistory.
-                    agent_response_obj = await st.session_state.langchain_stock_agent.agent_executor.ainvoke(
-                        {"input": prompt, "chat_history": msgs.messages}
-                    )
-                    
-                    response_content = agent_response_obj.get("output", "I could not generate a response.")
-                    st.markdown(response_content)
+            with st.spinner("Analyzing..."):
+                final_answer = ""; prompt_lower = prompt.lower()
+                ticker = extract_ticker(prompt); agent = st.session_state.langchain_stock_agent
+                
+                if ticker and "news" in prompt_lower:
+                    st.info("Getting latest news and AI summary...")
+                    tool_output_str = direct_get_news.invoke({"symbol": ticker})
+                    tool_output = json.loads(tool_output_str)
 
-                    # Check if a tool call was made that results in chart data (from our simulated tools)
-                    chart_metadata = {}
-                    if "tool_calls" in agent_response_obj and agent_response_obj["tool_calls"]:
-                        for tool_call in agent_response_obj["tool_calls"]:
-                            if tool_call["name"] == "stock_data_fetcher_tool":
-                                # This is a placeholder. In a real scenario, the tool output needs to be passed back
-                                # through the agent's response, or a separate mechanism to trigger chart display.
-                                # For this simplified AgentExecutor, we'll assume the LLM's final response will signal
-                                # when a chart should be displayed and we'll manually fetch and display it here
-                                # if the tool was implicitly called.
-                                # A better approach would involve structured output from the agent including chart data.
-                                # For now, let's re-fetch data based on the prompt's implied symbol for chart display.
-                                import re
-                                match = re.search(r'(?i)(AAPL|TSLA|NVDA)', prompt) # Simple regex to find symbol
-                                if match:
-                                    symbol = match.group(0).upper()
-                                    try:
-                                        from src.tools import stock_data_fetcher_tool as direct_fetch_tool
-                                        chart_data_json = direct_fetch_tool(symbol)
-                                        chart = chart_generator_tool(chart_data_json, symbol)
-                                        st.altair_chart(chart, use_container_width=True)
-                                        st.caption("Note: This chart uses hypothetical data for demonstration purposes only, as real-time stock data fetching is not integrated in this demo environment.")
-                                        # Store chart metadata to display on rerun (important for Streamlit)
-                                        chart_metadata = {"chart_data": chart_data_json, "chart_title": symbol}
-                                    except Exception as chart_e:
-                                        st.error(f"Error generating chart: {chart_e}")
+                    if tool_output.get("status") == "success":
+                        scraped_text = tool_output.get("scraped_text", "")
+                        company_name = tool_output.get("company_name")
+                        google_link = tool_output.get("google_news_link")
 
+                        if "Could not scrape" not in scraped_text and scraped_text:
+                            summary_prompt = f"Provide a concise, 4-5 line summary of the key points from the following news article text about {company_name}:\n\n---\n{scraped_text}\n---"
+                            response_obj = await agent.run_agent_with_history(summary_prompt)
+                            summary = response_obj.get("output", "Could not summarize the news.")
+                            final_answer = f"**AI News Summary for {company_name}:**\n\n{summary}\n\n---\n\nFor more details, [view the latest news on Google]({google_link})."
+                        else:
+                            final_answer = f"I couldn't retrieve the full article for a summary, but here is a reliable link to the latest news for {company_name}:\n\n[Click here to view on Google News]({google_link})"
+                    else: final_answer = f"Sorry, an error occurred: {tool_output.get('message', 'Unknown error')}"
+                
+                elif ticker and "fundamental" in prompt_lower:
+                    st.info("Using direct fundamental analysis tool...")
+                    final_answer = direct_get_fundamentals.invoke({"symbol": ticker})
 
-                    # Add assistant response to LangChain history
-                    # We append additional_kwargs for chart data for persistence across reruns
-                    if chart_metadata:
-                        msgs.add_ai_message(AIMessage(content=response_content, additional_kwargs=chart_metadata))
-                    else:
-                        msgs.add_ai_message(response_content)
-
-                except Exception as e:
-                    st.error(f"An error occurred while processing your request: {e}")
-                    msgs.add_ai_message(AIMessage(content=f"I apologize, an error occurred: {e}. Please try again."))
-
+                elif ticker and any(word in prompt_lower for word in ["recommend", "analysis", "analyze", "prediction", "technical"]):
+                    st.info("Using direct technical analysis tool...")
+                    tool_output_str = direct_get_recommendation.invoke({"symbol": ticker})
+                    tool_output = json.loads(tool_output_str)
+                    if tool_output.get("status") == "success":
+                        text_analysis = tool_output.get("text_analysis", "")
+                        rec_percent = tool_output.get("recommendation_percent", {})
+                        targets = tool_output.get("price_targets", {})
+                        final_answer = f'<div class="analysis-container">'
+                        final_answer += f"<h4>📈 Technical Snapshot for {ticker}</h4>"
+                        final_answer += f"<h5>Key Signals</h5><p>{text_analysis.replace('•', '<br>•')}</p><hr>"
+                        final_answer += f"<h5>Key Price Levels</h5><p><strong>Current:</strong> {targets.get('current', 'N/A')}<br><strong>Support:</strong> {targets.get('support', 'N/A')}<br><strong>Resistance:</strong> {targets.get('resistance', 'N/A')}</p><hr>"
+                        final_answer += "<h5>Recommendation</h5>"
+                        rec_html = " ".join([f'<span class="rec-percent {cat.lower()}">{cat}: {val}%</span>' for cat, val in rec_percent.items()])
+                        final_answer += f"<p>{rec_html}</p>"
+                        final_answer += "</div>"
+                    else: final_answer = f"Sorry, an error occurred: {tool_output.get('message', 'Unknown error')}"
+                
+                else: # Fallback
+                    st.info("Using AI Agent for conversational response...")
+                    response_obj = await agent.run_agent_with_history(prompt)
+                    final_answer = response_obj.get("output", "I'm not sure how to help with that.")
+                
+                st.markdown(final_answer, unsafe_allow_html=True)
+                st.markdown("\n*Disclaimer: This information is for educational purposes only.*")
+                msgs.add_message(AIMessage(content=final_answer))

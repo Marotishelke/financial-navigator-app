@@ -24,7 +24,7 @@ def show_intro_page():
         flex-direction: column;
         justify-content: center; /* Center vertically */
         align-items: center; /* Center horizontally */
-        min-height: 10vh; /* Full viewport height */
+        min-height: 6vh; /* Full viewport height */
         background: linear-gradient(135deg, #6DD5ED 0%, #2193B0 100%); /* Blue gradient */
         color: white;
         text-align: center;
@@ -175,7 +175,7 @@ def show_login_page():
         flex-direction: column;
         justify-content: center;
         align-items: center;
-        min-height: 60vh;
+        min-height: 50vh;
         background: #f0f2f6; /* Light grey background */
         font-family: 'Inter', sans-serif;
     }
@@ -418,7 +418,7 @@ def show_main_app():
 
     with col_logo:
        #st.markdown('<div class="app-logo">📈 Financial Navigator</div>', unsafe_allow_html=True)
-       st.markdown('<div class="app-logo" style="font-weight: bold; font-size: 20px;">📈 Financial Navigator</div>', unsafe_allow_html=True)
+       st.markdown('<div class="app-logo" style="font-weight: bold; font-size: 30px;">📈 Financial Navigator</div>', unsafe_allow_html=True)
 
         # Streamlit renders st.markdown with bold as h1
 
