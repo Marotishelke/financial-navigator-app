@@ -103,7 +103,7 @@ streamlit run app.py
 Chat with the Stock Advisor using questions like:
 - "Give me a deep fundamental analysis of HINDUNILVR.NS"
 - "I want a technical recommendation and price targets for TATAMOTORS.NS"
-- "What is the news summary for AAPL?"
+- "What is the news summary for INFY.NS?"
 
 ### 🌊 SIP Plan Tab
 Input your investment goals and risk appetite. Get:
