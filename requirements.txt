@@ -16,3 +16,4 @@ pandas-ta
 pydantic
 beautifulsoup4
 lxml
+setuptools
